@@ -1,0 +1,232 @@
+##########  HOW THE SOURCE CODE IS LAID OUT ############################################
+
+> /cmake
+    - Includes setup files to generate coverage reports
+    - Includes:
+        - CodeCoverageReportConfig.cmake
+> /config
+    - Includes our local and test configuration files used to customize features of the server and handler paths
+    - `local` is intended for local testing
+    - `test` is used in production
+> /docker
+    - All Docker-related configuration files
+    - Includes:
+        - base.Dockerfile
+        - cloudbuild.yaml
+        - coverage.Dockerfile
+        - Dockerfile
+> /include
+    > /request
+        - All header files that are utilized when a session gets a new HTTP request
+        - Includes:
+            - Our request handler interface & our 4 handlers:
+                - request_handle.h
+                    - Request handler interface used to define the basic structure of a request handler
+                - echo_handle.h
+                    - Echo handler declaration of functions and member variables
+                - fof_handle.h
+                    - 404 handler declaration of functions and member variables
+                - static_file_handle.h
+                    - Static file handler declaration of functions and member variables
+                - status_handle.h
+                    - Status handler declaration of functions and member variables
+            - Request and response-related classes:
+                - reply.h
+                    - Reply object declaration used to return information and content back to the client
+                - request.h
+                    - Request object declaration sent by the client and parsed by the server
+                - header.h
+                    - Header struct included in request and reply objects
+            - Our dispatcher mechanism:
+                - handler_dispatcher.h
+                    - Defines the dispatcher class used to initialize a specific request handler depending on the incoming request
+    - All remaining header files that are needed for the program to function:
+    - Includes:
+        - config_parser.h
+            - Defines NginxConfigStatement, NginxConfig, NginxConfigParser
+        - logger.h
+            - Defines the logger class used to generate our report logs
+        - server.h
+            - Defines the server class used to handle and generate new sessions
+        - session.h
+            - Defines the session class used to handle reads & writes and issues a request handler dispatcher
+> /src
+    > /request
+        - All source files dealing with HTTP requests that explicitly define the functions declared in the corresponding header files
+        - Includes:
+            - Our 4 handlers:
+                - echo_handle.cc
+                    - Echo handler definition
+                - fof_handle.cc
+                    - 404 handler definition
+                - static_file_handle.cc
+                    - Static file handler definition
+                - status_handle.cc
+                    - Status handler definition
+            - Request and response-related classes:
+                - reply.cc
+                - request.cc
+            - Our dispatcher mechanism:
+                - handler_dispatcher.cc
+    - All remaining source files that are needed for the program to function
+    - Includes:
+        - config_parser.cc
+        - logger.cc
+        - server.cc
+        - session.cc
+        - server_main.cc
+            - The main file of our program used to accept command-line arguments and initialize the server object
+> /static
+    - Base directory that stores all of our static files that are served to the client via the static file handler
+    - Includes files of varying file extensions such as:
+        - illusion.gif
+        - image.png
+        - royce.jpg
+        - strings.html
+        - test.txt
+        - test.zip
+> /static2
+    - Secondary directory that also stores the same static files as /static
+    - Used for the purpose of testing different base directories for our static file handler
+> /tests
+    - Includes all unit tests for the aforementioned classes as well as an integration test script
+    - Also includes all the test config files used in the config parser unit tests
+- CMakeLists.txt
+    - Our Makefile where we define libraries used in our program, link the libraries, compile the source files, and enable testing and code coverage
+
+##########  How to build the code ######################################################
+
+- Assume you are currently in the 'monkeydb' directory
+- Create a 'build' directory: `$ mkdir build`
+- Enter the 'build' directory: `$ cd build`
+- Run the following command: `$ cmake ..`
+- Run the following command: `$ make`
+
+##########  How to test the code #######################################################
+
+- Assume you are currently in the 'monkeydb' directory
+- Enter the 'build' directory: `$ cd build`
+- Run the following command: `$ make test`
+
+##########  How to generate coverage reports ###########################################
+
+- Assume you are currently in the 'monkeydb' directory
+- Create a 'build_coverage' directory: `$ mkdir build_coverage`
+- Enter the 'build_coverage' directory: `$ cd build_coverage`
+- Run the following command: `$ cmake -DCMAKE_BUILD_TYPE=Coverage ..`
+- Run the following command: `$ make test`
+
+########## How to run the code #########################################################
+
+- Assume you are currently in the 'monkeydb' directory
+- Enter the 'build' directory: `$ cd build`
+- To run the code locally, run the following command: `$ bin/server ../config/local`
+
+########## How to add a request handler ################################################
+
+### Creating your header file
+
+1) Define a new request handler header file that extends the `Requesthandle` abstract class in `monkeydb/include/request` with filename `<function>_handle.h`
+    - EX. `monkeydb/include/request/echo_handle.h`
+    - Make sure to add `#include "request_handle.h"`
+2) In the header file, declare the following public functions that are established in the `Requesthandle` class:
+    - static Responsehandle* Init(std::string location_prefix, NginxConfig& config);
+    - virtual Response handleRequest(const Request& request);
+    - NOTE: you can also declare any private functions or member variables needed for that specific handler
+    - EX.
+        `#ifndef ECHO_HANDLE_H
+        #define ECHO_HANDLE_H
+
+        #include <iostream>
+        #include "request_handle.h"
+
+        /* Make sure to extend the Requesthandle interface */
+        class EchoHandle : public Requesthandle {
+            /* Public member functions declared in the Requesthandle interface */
+            public:
+                static Requesthandle* Init(std::string location_prefix, const NginxConfig& config);
+                Response handleRequest(const Request &request_);
+
+            /* Private member functions and variables needed for the implementation of handleRequest() */
+            private:
+                std::string ToString(const Request &request_);
+                Response reply_;
+            };
+        #endif`
+
+### Creating your source file
+
+3) Define a new request handler source file in `monkeydb/src/request' with filename `<function>_handle.cc`
+    - EX. `monkeydb/src/request/echo_handle.cc`
+    - Make sure to include the header file that you declared in step 1
+4) In the source file, define the public functions declared in the header file as follows:
+    - Init(): Use this function to compare the `location_prefix` param to the entries in the `server::uri2handler` map and return a pointer to your specific handler
+    - handleRequest(): Use this function to perform the specific functionality that you want for your new request handler
+    - NOTE: make sure to define any other private functions that were declared in the header file
+
+## Defining your configuration parameters
+
+5) In the local configuration file, `monkeydb/config/local`, define the URI path in which your request handler will be called, as well as any additional parameters needed (i.e. a root directory path)
+    - The format must be defined as follows:
+        `location "/<path_name>" <Handler_Name> { <additonal_parameters> }`
+        - Where:
+            - <path_name> is the URI path your request handler is called by,
+            - <Handler_Name> is the name of your handler
+            - <additional_parameters> are any parameters your handler might also need
+    - EX. `location "/echo" EchoHandler {}`
+6) Repeat step 5 but in the test configuration file, `monkeydb/config/test`
+    - This makes sure that when the server is deployed, it also gets the same configuration values as defined locally
+
+## Adding your handler to the server
+
+7) In `server.cc`, go to the `void create_handler_mappings()` function. The server parses the configuration file and creates a map called `uri2info` in the following format: <PathURI, <HandlerType, RootVal>>
+    - This function then iterates through the map and creates a new mapping called `uri2handler` from PathURI to a `Requesthandle*` pointer.
+    - Inside the for-statement, the function checks the HandlerType and will have to generate a pointer to your newly created handler, then add that pointer to the `uri2handler` map.
+    - Following the if-statement logic, append your new handler to the else-if statements in the following format:
+        `else if (handler_type == "<Handler_Name>") {
+            // initialize your handler
+            <Your_Handler>* new_handler = new <Your_Handler>;
+            std::pair<std::string, Requesthandle*> new_pair(path_val, new_handler);
+            uri2handler.insert(new_pair);
+        }`
+    - EX.
+        else if (handler_type == "EchoHandler") {
+            // initialize an echo handler
+            EchoHandle* echo_handler = new EchoHandle;
+            std::pair<std::string, Requesthandle*> echo_pair(path_val, echo_handler);
+            uri2handler.insert(echo_pair);
+        }
+
+## Adding your handler to the dispatcher
+
+8) In `handler_dispatcher.cc`, go to the `Requesthandle* getRequestHandler(const Request &request_)` function.
+    - This function will find the PathURI declared in the configuration file with the longest matching prefix to the incoming request URI.
+    - Depending on the PathURI, the corresponding HandlerType will be used to determine which request handler needs to be dispatched.
+    - Following the if-statement logic, append your new handler to the else-if statements in the following format:
+        else if (handler_type == <Handler_Name>) {
+            /* <add necessary parameters to post_parsed_config here> */
+            logger->log(0, "Handle <handler_type>");
+            return <Your_Handler>::Init(longest_match, post_parsed_config);
+        }
+    - EX.
+        else if (handler_type == EchoHandler)
+        {
+            logger->log(0, "Handle echo");
+            return EchoHandle::Init(longest_match, post_parsed_config);
+        }
+    - NOTE: post_parsed_config is a NginxConfig object which contains statements that define the necessary parameters needed by your new handler (i.e. a root directory path)
+    - The Init function should return a pointer to the appropriate request handler
+
+## Compilation and linking
+
+9) In `CMakeLists.txt`, make sure to link your new request handler source file (created in step 3) to the `request_handler` executable.
+    - This can be done by:
+        - Go to line 44 and append your source file, `<function>_handle.cc`, to the list of other handlers:
+            - EX. add_library(request_handler src/request/<function>_handle.cc src/request/echo_handle.cc src/request/request_parser.cc src/request/static_file_handle.cc src/request/fof_handle.cc src/request/status_handle.cc src/request/handler_dispatcher.cc)
+    - This ensures that your new handler is compiled and linked to the correct executable.
+
+## Testing your handler
+
+10) Write additional unit test in `monkeydb/tests/handle_reply_test.cc` to test your new handler
+11) Test your new handler in the integration test in `monkeydb/tests/server_test.sh`
+
